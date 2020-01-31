@@ -1,0 +1,26 @@
+{{- if .Values.networkPolicy.enabled }}
+kind: NetworkPolicy
+apiVersion: {{ template "networkPolicy.apiVersion" . }}
+metadata:
+  name: {{ template "nats.fullname" . }}
+  labels:
+    {{ include "nats.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{ include "nats.labels.selector" . | nindent 6 }}
+  # ingress:
+  #   # Allow inbound connections
+  #   - ports:
+  #     - port: {{ .Values.client.service.port }}
+  #     {{- if not .Values.networkPolicy.allowExternal }}
+  #     from:
+  #       - podSelector:
+  #           matchLabels:
+  #             {{ template "nats.fullname" . }}-client: "true"
+  #     {{- end }}
+  #   - ports:
+  #     - port: {{ .Values.cluster.service.port }}
+  #   - ports:
+  #     - port: {{ .Values.monitoring.service.port }}
+{{- end }}

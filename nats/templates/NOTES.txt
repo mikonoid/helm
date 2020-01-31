@@ -1,0 +1,38 @@
+** Please be patient while the chart is being deployed **
+
+{{- if or (contains .Values.nats.client.service.type "LoadBalancer") (contains .Values.nats.client.service.type "nodePort") }}
+{{- if not .Values.nats.client.auth.enabled }}
+{{ if and (not .Values.networkPolicy.enabled) (.Values.networkPolicy.allowExternal) }}
+
+-------------------------------------------------------------------------------
+ WARNING
+
+    By specifying "client.service.type=NodePort/LoadBalancer" and "auth.enabled=false"
+    you have most likely exposed the NATS service externally without any authentication
+    mechanism.
+
+    For security reasons, we strongly suggest that you switch to "ClusterIP". As
+    alternative, you can also switch to "auth.enabled=true" providing a valid
+    password on "auth.password" parameter.
+
+-------------------------------------------------------------------------------
+{{- end }}
+{{- end }}
+{{- end }}
+
+NATS can be accessed via port {{ .Values.nats.client.service.port }} on the following DNS name from within your cluster:
+
+   {{ template "nats.fullname" . }}-client.{{ .Release.Namespace }}.svc.cluster.local
+
+{{- if .Values.nats.client.auth.enabled }}
+To get the authentication credentials, run:
+
+    export NATS_USER=$(kubectl get cm --namespace {{ .Release.Namespace }} {{ template "nats.fullname" . }} -o jsonpath='{.data.*}' | grep -m 1 user | awk '{print $2}')
+    export NATS_PASS=$(kubectl get cm --namespace {{ .Release.Namespace }} {{ template "nats.fullname" . }} -o jsonpath='{.data.*}' | grep -m 1 password | awk '{print $2}')
+    echo -e "Client credentials:\n\tUser: $NATS_USER\n\tPassword: $NATS_PASS"
+
+{{- end }}
+
+NATS monitoring service can be accessed via port {{ .Values.monitoring.service.port }} on the following DNS name from within your cluster:
+
+   {{ template "nats.fullname" . }}-monitoring.{{ .Release.Namespace }}.svc.cluster.local
