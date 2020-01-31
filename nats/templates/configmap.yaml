@@ -1,0 +1,98 @@
+{{- $authPwd := default (include "nats.randomPassword" .) .Values.nats.client.auth.password -}}
+{{- $clusterAuthPwd := default (include "nats.randomPassword" .) .Values.cluster.auth.password -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "nats.fullname" . }}
+  labels:
+    {{ include "nats.labels" . | nindent 4 }}
+data:
+  nats.conf: |-
+    listen: 0.0.0.0:{{ .Values.nats.client.service.port }}
+    http: 0.0.0.0:{{ .Values.monitoring.service.port }}
+
+    # Authorization for client connections
+    {{- if .Values.nats.client.auth.enabled }}
+    authorization {
+      user: {{ .Values.nats.client.auth.user }}
+      password: {{ .Values.nats.client.auth.password }}
+      timeout:  1
+    }
+    {{- end }}
+
+    # Logging options
+    debug: {{ .Values.debug.enabled }}
+    trace: {{ .Values.debug.trace }}
+    logtime: {{ .Values.debug.logtime }}
+
+    # Pid file
+    pid_file: "/tmp/nats.pid"
+
+    # Some system overrides
+    {{- if .Values.maxConnections }}
+    max_connections: {{ .Values.maxConnections }}
+    {{- end }}
+    {{- if .Values.maxControlLine }}
+    max_control_line: {{ .Values.maxControlLine }}
+    {{- end }}
+    {{- if .Values.maxPayload }}
+    max_payload: {{ .Values.maxPayload }}
+    {{- end }}
+    {{- if .Values.writeDeadline }}
+    write_deadline: {{ .Values.writeDeadline | quote }}
+    {{- end }}
+
+
+    # gateway definition
+    gateway {
+      name: {{ .Values.gateway.name }}
+      listen: 0.0.0.0:{{ .Values.gateway.service.port }}
+
+      # Authorization for gateways
+      {{- if .Values.gateway.auth.enabled }}
+      authorization {
+        user: {{ .Values.gateway.auth.user }}
+        password: {{ .Values.gateway.auth.password }}
+      }
+      {{- end }}
+      gateways: [
+          {{- if and .Values.gateway.auth.enabled .Values.gateway.auth.user }}
+          { name: "{{ .Values.gateway.name }}", url: "nats://{{ .Values.gateway.auth.user }}:{{ .Values.gateway.auth.password }}@127.0.0.1:{{ .Values.gateway.service.port }}" },
+          {{- else }}
+          { name: "{{ .Values.gateway.name }}", url: "nats://127.0.0.1:{{ .Values.gateway.service.port }}" },
+          {{- end }}
+          {{- if .Values.gateway.clusters }}
+          {{- range .Values.gateway.clusters }}
+          { name: "{{ .name }}", url: "nats://{{ .user }}:{{ .password }}@{{ .IP }}:{{ .port }}" },
+          {{- end -}}
+          {{- end }}
+          ]
+    }
+
+    # Clustering definition
+    cluster {
+      listen: 0.0.0.0:{{ .Values.cluster.service.port }}
+
+      # Authorization for cluster connections
+      {{- if .Values.cluster.auth.enabled }}
+      authorization {
+        user: {{ .Values.cluster.auth.user }}
+        password: {{ .Values.cluster.auth.password }}
+        timeout:  1
+      }
+      {{- end }}
+
+
+      # Routes are actively solicited and connected to from this server.
+      # Other servers can connect to us if they supply the correct credentials
+      # in their routes definitions from above
+      routes = [
+        {{- if  and .Values.cluster.auth.enabled  .Values.cluster.auth.user }}
+        nats-route://{{ .Values.cluster.auth.user }}:{{ .Values.cluster.auth.password }}@{{ template "nats.fullname" . }}-cluster:{{ .Values.cluster.service.port }}
+        {{- else if .Values.cluster.auth.token }}
+        nats-route://{{ .Values.cluster.auth.token }}@{{ template "nats.fullname" . }}-cluster:{{ .Values.cluster.service.port }}
+        {{- else }}
+        nats-route://{{ template "nats.fullname" . }}-cluster:{{ .Values.cluster.service.port }}
+        {{- end }}
+      ]
+    }
